@@ -1,0 +1,6 @@
+*.exe
+.vscode/
+testset/
+*.png
+*.pdf
+*.zip
