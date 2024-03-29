@@ -28,15 +28,13 @@ parser = argparse.ArgumentParser(description='good Program')
 parser.add_argument('--exe', type=str, default="output.txt", help='Path to the solution file')
 parser.add_argument('--testset_path', type=str, default="testset", help='Path to the testset folder')
 parser.add_argument('--folders', type=str, nargs='+', default=["tiny"], help='List of folders to test, should be in the testset folder.')
-parser.add_argument('--verbose', action='store_true', help='Produce detailed output')
+parser.add_argument('--timeout', type=int, default=5, help='Timelimit of each testcase, default is 5 seconds')
+parser.add_argument('--thread', type=int, default=int(os.cpu_count()/2), help='Num of thread to use')
 
-# fininsh_ids = set()
 
-def run_test_case(testcase, testcase_path, excutable_name: str = None):
+def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: int = 5):
 
     testcase = os.path.join(testcase_path, testcase)
-
-    # print(f"testing {testcase}...", end="")
 
     input_file = open(testcase, 'r', encoding="utf-8")
     iterator = iter(input_file)
@@ -74,12 +72,26 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None):
     else:  # Unix/Linux
         command = f"cat {testcase} | {excutable_name}"
     
-    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if result.returncode != 0:
-        print(result.stderr)
-        exit(1)
-    
-    output_file = result.stdout.strip().split("\n")
+    # try:
+    #     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3)
+    # except subprocess.TimeoutExpired:
+    #     print(f"Test case {testcase} timed out after {3} seconds")
+    #     exit(1)
+
+    process = None
+    try:
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        print(f"testcase {testcase} timed out after {timeout} seconds")
+        os._exit(1)
+    except Exception as e:
+        print(f"An error occurred: {str(e)} {stderr}")
+        os._exit(1)
+
+    output_file = stdout.strip().split("\n")
 
     iterator = iter(output_file)
 
@@ -100,7 +112,7 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None):
                 gate_id = gates.index((log_src, log_dst))
                 gates[gate_id] = (-1, -1)
                 gate_id += 1
-                # print(f"gate_id: {gate_id}")
+
             except ValueError:
                 print(f"gate not found: {(log_src, log_dst)}")
                 # exit(1)
@@ -118,14 +130,10 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None):
                 in_degree[v] -= 1
                 if in_degree[v] == 0:
                     queue.add(v)
-            if args.verbose:
-                print(f"CNOT q{src} q{dst}")
             cnot_counter += 1
 
         elif op_type == "SWAP":
             qubit_mapping[log_src], qubit_mapping[log_dst] = qubit_mapping[log_dst], qubit_mapping[log_src]
-            if args.verbose:
-                print(f"SWAP q{log_src} q{log_dst}")
 
             swap_counter += 1
 
@@ -135,10 +143,6 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None):
 
     print(f"{testcase} all OK. {cnot_counter} CNOT, {swap_counter} SWAP")
 
-    # global fininsh_ids
-    # fininsh_ids.add(testcase)
-    # print(fininsh_ids)
-
     return cnot_counter, swap_counter
 
 
@@ -147,14 +151,16 @@ args = parser.parse_args()
 folders = args.folders
 benchmark_result = []
 
+print(f"using {args.thread} threads")
+
 for folder in folders:
     testcase_path = os.path.join(args.testset_path, folder)
     testcases = os.listdir(testcase_path)
 
     total_cnot_counter, total_swap_counter = 0, 0
-    fun = partial(run_test_case, testcase_path=testcase_path, excutable_name=args.exe)
+    fun = partial(run_test_case, testcase_path=testcase_path, excutable_name=args.exe, timeout=args.timeout)
 
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=args.thread) as executor:
         results = executor.map(fun, testcases)
 
     for result in results:

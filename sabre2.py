@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 import math
 
 class BiDict:
@@ -59,6 +59,46 @@ def swap_qubit(qubit_mapping: BiDict, gate: tuple[int, int]):
     qubit_mapping[gate[0]] = qubit_mapping[gate[1]]
     qubit_mapping[gate[1]] = temp
 
+
+def select_swap(candidate_swap, queue, future_queue, all_pair_distance, gates, qubit_score, score_strategy: str = "basic"):
+    best_score, best_swap, best_solved_gate = 1e9, None, None
+
+    for swap in candidate_swap:
+        swap_qubit(qubit_mapping, swap)
+
+        score = 0
+        solved_gate = []
+        for candidate in queue:
+            src, dst = gates[candidate]
+            score += all_pair_distance[qubit_mapping[src]][qubit_mapping[dst]]
+            if all_pair_distance[qubit_mapping[src]][qubit_mapping[dst]] == 1:
+                solved_gate.append(candidate)
+        
+        future_score = 0
+        for candidate in future_queue:
+            src, dst = gates[candidate]
+            future_score += all_pair_distance[qubit_mapping[src]][qubit_mapping[dst]]
+
+        # score = max(qubit_score[qubit_mapping[swap[0]]], qubit_score[qubit_mapping[swap[1]]]) * (score + 0.5 * future_score)
+        score = (score + 0.5 * future_score)
+
+        # print(f"swap {swap} score {score}")
+        
+        if score <= best_score:
+            best_score = score
+            best_swap = swap
+            best_solved_gate = solved_gate
+        swap_qubit(qubit_mapping, swap)
+
+    if best_score != 1e9:
+        return best_swap, best_solved_gate, best_score
+    else:
+        print("no best swap")
+        exit(1)
+
+    
+
+
 #-----------------input------------------
 logQubits, num_gates, num_dependencies, phyQubits, num_phyLinks = map(int, input().split())
 gates = []
@@ -87,8 +127,10 @@ for u, v in dependencies:
     in_degree[v] += 1
 
 qubit_mapping = BiDict()
+qubit_score = [1] * logQubits
 for i in range(logQubits):
-    qubit_mapping[i] = i 
+    qubit_score[i] = 0
+    qubit_mapping[i] = i
 
 all_pair_distance = G.all_pair_distances()
 #-----------------------------------------
@@ -96,37 +138,76 @@ all_pair_distance = G.all_pair_distances()
 for key, value in qubit_mapping.forward.items():
     print(f"{key + 1} {value + 1}")
 
-queue = set([u for u in graph if in_degree[u] == 0])
-
+check_queue = deque([u for u in graph if in_degree[u] == 0])
+executable_queue = []
 
 operations = []
-while queue:
-    has_excutable = True
-
-    while has_excutable:
-        has_excutable = False
-        for candidate in list(queue):
-            log_src, log_dst = gates[candidate]
-            if all_pair_distance[qubit_mapping[log_src]][qubit_mapping[log_dst]] == 2:
-                has_excutable = True
-                # print(f"excutable {(log_src, log_dst)}")
-                operations.append((1, log_src, log_dst)) # cnot
-                queue.remove(candidate)
-
-                for v in graph[candidate]:
-                    in_degree[v] -= 1
-                    if in_degree[v] == 0:
-                        queue.add(v)
-
-    candidate_swap = set()
-
-    for candidate in queue:
-        log_src, log_dst = gates[candidate]
-        phy_src, phy_dst = qubit_mapping[log_src], qubit_mapping[log_dst]
-        candidate_swap.update({(log_src, qubit_mapping.reverse[neighbor]) for neighbor in G.graph[phy_src]})
-        candidate_swap.update({(log_dst, qubit_mapping.reverse[neighbor]) for neighbor in G.graph[phy_dst]})
-
+N = 10
+while True and N:
     
+    while check_queue:
+        # print(f"check queue {check_queue}")
+        candidate = check_queue.popleft()
+        log_src, log_dst = gates[candidate]
+        if all_pair_distance[qubit_mapping[log_src]][qubit_mapping[log_dst]] == 1:
+            operations.append((1, log_src, log_dst))
 
-    print(candidate_swap)
-    exit(0)
+            for v in graph[candidate]:
+                in_degree[v] -= 1
+                if in_degree[v] == 0:
+                    check_queue.append(v)
+        
+        else:
+            executable_queue.append(candidate)
+
+    # print(f"excuteable queue {executable_queue}")
+
+    if not executable_queue:
+        break
+        
+    future_queue = []
+    for candidate in executable_queue:
+        future_queue.extend(neighbor for neighbor in graph[candidate] if in_degree[neighbor] == 1)
+
+    # print(f"future gate {future_queue}")
+
+    best_solved_gate = []
+    num_search_step = 0
+
+    while not best_solved_gate:
+        candidate_swap = set()
+
+        for candidate in executable_queue:
+            log_src, log_dst = gates[candidate]
+            phy_src, phy_dst = qubit_mapping[log_src], qubit_mapping[log_dst]
+            candidate_swap.update({(log_src, qubit_mapping.reverse[neighbor]) for neighbor in G.graph[phy_src]})
+            candidate_swap.update({(log_dst, qubit_mapping.reverse[neighbor]) for neighbor in G.graph[phy_dst]})
+
+
+        best_swap, best_solved_gate, best_score = select_swap(candidate_swap, executable_queue, future_queue,
+                                                               all_pair_distance, gates, qubit_score)
+
+        if num_search_step > 5:
+            qubit_score = [1] * logQubits
+            num_search_step = 0
+        else:
+            # use logical or physical?
+            qubit_score[qubit_mapping[best_swap[0]]] += 0.01
+            qubit_score[qubit_mapping[best_swap[1]]] += 0.01
+        
+        num_search_step += 1
+        swap_qubit(qubit_mapping, best_swap)
+        operations.append((0, best_swap[0], best_swap[1]))
+    
+    executable_queue = [item for item in executable_queue if item not in best_solved_gate]
+    check_queue.extend(best_solved_gate)
+
+    # print(f"best solved gate: {best_solved_gate}")
+    # N -= 1
+
+
+
+
+for op in operations:
+    op_type, src, dst = op
+    print(f"{'CNOT' if op_type else 'SWAP'} q{src + 1} q{dst + 1}")
