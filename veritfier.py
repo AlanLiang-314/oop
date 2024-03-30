@@ -4,6 +4,7 @@ import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+import time
 
 
 class Graph:
@@ -58,14 +59,14 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
 
     input_file.close()
 
-    graph = defaultdict(list)
-    in_degree = defaultdict(int)
+    graph = [[] for _ in range(num_gates + 1)]
+    in_degree = [0] * (num_gates + 1)
 
     for u, v in dependencies:
         graph[u].append(v)
         in_degree[v] += 1
 
-    queue = set([u for u in graph if in_degree[u] == 0])
+    queue = set([u for u in range(1, num_gates + 1) if in_degree[u] == 0])
 
     if os.name == 'nt':  # Windows
         command = f"type {testcase} | {excutable_name}"
@@ -77,6 +78,8 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
     # except subprocess.TimeoutExpired:
     #     print(f"Test case {testcase} timed out after {3} seconds")
     #     exit(1)
+        
+    start_time = time.time()
 
     process = None
     try:
@@ -91,67 +94,74 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
         print(f"An error occurred: {str(e)} {stderr}")
         os._exit(1)
 
-    output_file = stdout.strip().split("\n")
+    end_time = time.time()
+    runtime = end_time - start_time
 
-    iterator = iter(output_file)
+    try:
+        output_file = stdout.strip().split("\n")
 
-    qubit_mapping = dict()
-    for _ in range(logQubits):
-        logbit, phybit = map(int, next(iterator).split())
-        qubit_mapping[logbit] = phybit
+        iterator = iter(output_file)
 
-    cnot_counter, swap_counter = 0, 0
+        qubit_mapping = dict()
+        for _ in range(logQubits):
+            logbit, phybit = map(int, next(iterator).split())
+            qubit_mapping[logbit] = phybit
 
-    failure = False
+        cnot_counter, swap_counter = 0, 0
 
-    while queue and not failure:
-        op_type, src, dst = next(iterator).split()
-        src, dst = int(src[1:]), int(dst[1:])
-        log_src, log_dst = (src, dst) if src < dst else (dst, src)
+        failure = False
 
-        if op_type == "CNOT":
-            try:
-                gate_id = gates.index((log_src, log_dst))
-                gates[gate_id] = (-1, -1)
-                gate_id += 1
+        while queue and not failure:
+            op_type, src, dst = next(iterator).split()
+            src, dst = int(src[1:]), int(dst[1:])
+            log_src, log_dst = (src, dst) if src < dst else (dst, src)
 
-            except ValueError:
-                print(f"gate not found: {(log_src, log_dst)}")
-                failure = True
-                # exit(1)
-            try:
-                queue.remove(gate_id)
-            except KeyError:
-                print(f"expect gate in: {queue} but found: {gate_id}")
-                failure = True
-                # exit(1)
+            if op_type == "CNOT":
+                try:
+                    gate_id = gates.index((log_src, log_dst))
+                    gates[gate_id] = (-1, -1)
+                    gate_id += 1
 
-            if not G.are_neighbors(qubit_mapping[log_src], qubit_mapping[log_dst]):
-                print(f"{(log_src, log_dst)} are not neighbors")
-                failure = True
-                # exit(1)
+                except ValueError:
+                    print(f"gate not found: {(log_src, log_dst)}")
+                    failure = True
+                    # exit(1)
+                try:
+                    queue.remove(gate_id)
+                except KeyError:
+                    print(f"expect gate in: {queue} but found: {gate_id}")
+                    failure = True
+                    # exit(1)
 
-            for v in graph[gate_id]:
-                in_degree[v] -= 1
-                if in_degree[v] == 0:
-                    queue.add(v)
-            cnot_counter += 1
+                if not G.are_neighbors(qubit_mapping[log_src], qubit_mapping[log_dst]):
+                    print(f"{(log_src, log_dst)} are not neighbors")
+                    failure = True
+                    # exit(1)
 
-        elif op_type == "SWAP":
-            qubit_mapping[log_src], qubit_mapping[log_dst] = qubit_mapping[log_dst], qubit_mapping[log_src]
+                for v in graph[gate_id]:
+                    in_degree[v] -= 1
+                    if in_degree[v] == 0:
+                        queue.add(v)
+                cnot_counter += 1
 
-            swap_counter += 1
+            elif op_type == "SWAP":
+                qubit_mapping[log_src], qubit_mapping[log_dst] = qubit_mapping[log_dst], qubit_mapping[log_src]
 
-        else:
-            print(f"unknown op type: {op_type}")
-            exit(1)
+                swap_counter += 1
+
+            else:
+                print(f"unknown op type: {op_type}")
+                exit(1)
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        failure = True
 
     if failure:
         print(f"{testcase} failed.")
     else:
-        print(f"{testcase} all OK. {cnot_counter} CNOT, {swap_counter} SWAP")
+        print(f"{testcase} all OK. {cnot_counter} CNOT, {swap_counter} SWAP, {runtime:.3f} s")
 
-    return cnot_counter, swap_counter
+    return cnot_counter, swap_counter, runtime, failure
 
 
 args = parser.parse_args()
@@ -165,19 +175,32 @@ for folder in folders:
     testcase_path = os.path.join(args.testset_path, folder)
     testcases = os.listdir(testcase_path)
 
-    total_cnot_counter, total_swap_counter = 0, 0
+    total_cnot_counter, total_swap_counter, total_runtime = 0, 0, 0
     fun = partial(run_test_case, testcase_path=testcase_path, excutable_name=args.exe, timeout=args.timeout)
 
     with ThreadPoolExecutor(max_workers=args.thread) as executor:
         results = executor.map(fun, testcases)
 
-    for result in results:
-        cnot_counter, swap_counter = result
-        total_cnot_counter += cnot_counter
-        total_swap_counter += swap_counter
+    failed_testcase = []
+    try:
+        for i, result in enumerate(results):
+            cnot_counter, swap_counter, runtime, failure = result
+            if failure:
+                failed_testcase.append(i + 1)
+            else:
+                total_cnot_counter += cnot_counter
+                total_swap_counter += swap_counter
+                total_runtime += runtime
+    except Exception as e:
+        print(f"error occured: {str(e)}")
+        os._exit(1)
 
-    print(f"{folder} completed, avg {total_cnot_counter/len(testcases):.3f} CNOT, {total_swap_counter/len(testcases):.3f} SWAP")
-    benchmark_result.append((folder, total_cnot_counter/len(testcases), total_swap_counter/len(testcases)))
+    if not failed_testcase:
+        print(f"{folder} completed, avg {total_cnot_counter/len(testcases):.3f} CNOT, {total_swap_counter/len(testcases):.3f} SWAP, {total_runtime/len(testcases):.3f} seconds")
+        benchmark_result.append((folder, total_cnot_counter/len(testcases), total_swap_counter/len(testcases)))
+    else:
+        print(f"failed testcase: {failed_testcase}")
+        os._exit(1)
 
 print("-" * 60)
 print("result:")

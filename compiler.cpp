@@ -24,6 +24,8 @@ private:
     std::unordered_map<int, int> reverse;
 
 public:
+    BiDict() = default;
+
     void setItem(int key, int value) {
         forward[key] = value;
         reverse[value] = key;
@@ -116,7 +118,7 @@ void swapQubit(BiDict& qubitMapping, std::pair<int, int> gate) {
 }
 
 // Function declarations
-std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits);
+std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits, int numGates);
 // void printMapping(const BiDict& qubitMapping, int logQubits);
 
 int main() {
@@ -149,7 +151,7 @@ int main() {
         qubitMapping.setItem(i, i);
     }
 
-    std::vector<std::pair<int, std::pair<int, int>>> operations = sabresSwap(gates, dependencies, g, logQubits);
+    std::vector<std::pair<int, std::pair<int, int>>> operations = sabresSwap(gates, dependencies, g, logQubits, numGates);
 
     for (int i = 0; i < logQubits; ++i) {
         std::cout << i + 1 << " " << qubitMapping.getItem(i) + 1 << std::endl;
@@ -168,11 +170,11 @@ int main() {
     return 0;
 }
 
-std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits) {
-    // std::unordered_map<int, std::vector<int>> graph;
-    std::vector<std::vector<int>> dependencyGraph(logQubits + 5);
-    // std::unordered_map<int, int> inDegree;
-    std::vector<int> inDegree(logQubits + 5, 0);
+std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits, int numGates) {
+    std::vector<std::vector<int>> dependencyGraph(numGates);
+    std::vector<int> inDegree(numGates, 0);
+
+    // printf("numgates %d\n", numGates);
 
     for (const auto& dependency : dependencies) {
         int u = dependency.first;
@@ -185,7 +187,7 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
     std::unordered_set<int> executableQueue;
 
     // find all gate id with no dependency
-    for (int idx = 0; idx < logQubits; idx++) {
+    for (int idx = 0; idx < numGates; idx++) {
         if (inDegree[idx] == 0) {
             checkQueue.push(idx);
         }
@@ -200,6 +202,14 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
 
     std::vector<std::vector<int>> allPairDistance = g.allPairDistances();
 
+    // for (int i=0;i<numGates;i++) {
+    //     printf("%d: ", i + 1);
+    //     for (int tgtnode : dependencyGraph[i]) {
+    //         printf("%d ", tgtnode + 1);
+    //     }
+    //     printf(" | %d\n", inDegree[i]);
+    // }
+
     int a_cnt = 2;
     while (1) {
         // printf("check queue size %d\n", checkQueue.size());
@@ -207,24 +217,24 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
         while (!checkQueue.empty()) {
             int candidate = checkQueue.front();
             checkQueue.pop();
-            // printf("check candidate %d\n", candidate);
+            // printf("check candidate %d\n", candidate + 1);
             int logSrc = gates[candidate].first;
             int logDst = gates[candidate].second;
 
             if (allPairDistance[qubitMapping.getItem(logSrc)][qubitMapping.getItem(logDst)] == 1) {
-                // printf("done candidate %d\n", candidate);
+                // printf("done candidate %d, (%d, %d)\n", candidate + 1, logSrc + 1, logDst + 1);
                 operations.push_back(std::make_pair(1, std::make_pair(logSrc, logDst)));
 
                 for (int v : dependencyGraph[candidate]) {
                     inDegree[v]--;
                     if (inDegree[v] == 0) {
-                        // printf("new candidate %d\n", v);
+                        // printf("new candidate %d\n", v + 1);
                         checkQueue.push(v);
                     }
                 }
 
             } else {
-                // printf("new executable %d\n", candidate);
+                // printf("new executable %d\n", candidate + 1);
                 executableQueue.insert(candidate);
             }
 
