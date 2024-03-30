@@ -102,7 +102,9 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
 
     cnot_counter, swap_counter = 0, 0
 
-    while queue:
+    failure = False
+
+    while queue and not failure:
         op_type, src, dst = next(iterator).split()
         src, dst = int(src[1:]), int(dst[1:])
         log_src, log_dst = (src, dst) if src < dst else (dst, src)
@@ -115,15 +117,18 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
 
             except ValueError:
                 print(f"gate not found: {(log_src, log_dst)}")
+                failure = True
                 # exit(1)
             try:
                 queue.remove(gate_id)
             except KeyError:
-                print(f"expect gate in: {queue} but found: {(log_src, log_dst)}")
+                print(f"expect gate in: {queue} but found: {gate_id}")
+                failure = True
                 # exit(1)
 
             if not G.are_neighbors(qubit_mapping[log_src], qubit_mapping[log_dst]):
                 print(f"{(log_src, log_dst)} are not neighbors")
+                failure = True
                 # exit(1)
 
             for v in graph[gate_id]:
@@ -141,7 +146,10 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
             print(f"unknown op type: {op_type}")
             exit(1)
 
-    print(f"{testcase} all OK. {cnot_counter} CNOT, {swap_counter} SWAP")
+    if failure:
+        print(f"{testcase} failed.")
+    else:
+        print(f"{testcase} all OK. {cnot_counter} CNOT, {swap_counter} SWAP")
 
     return cnot_counter, swap_counter
 
