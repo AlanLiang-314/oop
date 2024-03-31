@@ -3,13 +3,17 @@ import networkx as nx
 import os
 
 seeds: int = 1
-testset_type: str = "xsmall"
+testset_type: str = "large"
 
 if not os.path.exists(os.path.join("testset", testset_type)):
     os.makedirs(os.path.join("testset", testset_type))
 
 for seeds in range(1, 101):
     random.seed(seeds)
+
+    # large
+    # logQubits = random.randint(3000, 6000)
+    # gates = random.randint(10000, 20000)
 
     # medium
     # logQubits = random.randint(1000, 2000)
