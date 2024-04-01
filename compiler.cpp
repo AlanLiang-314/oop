@@ -120,56 +120,83 @@ void swapQubit(BiDict& qubitMapping, std::pair<int, int> gate) {
 }
 
 // Function declarations
-std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits, int numGates);
+std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(
+    const std::vector<std::pair<int, int>>& gates,
+    const std::vector<std::pair<int, int>>& dependencies, const Graph& g,
+    int logQubits, int numGates);
+
+void findBestSwap(const std::pair<std::pair<int, int>, std::vector<int>>& qubit,
+                  std::pair<int, int>& mainGate,
+                  std::pair<int, int>& punishSwap,
+                  std::unordered_map<int, int>& swapMap,
+                  std::unordered_map<int, int>& futureSwapMap,
+                  const std::vector<std::pair<int, int>>& gates,
+                  std::vector<std::vector<int>>& allPairDistance,
+                  BiDict& qubitMapping, int& currentScore, int& bestScore,
+                  std::vector<std::pair<int, int>>& bestSwaps);
+
+void findBestSwap(const std::pair<std::pair<int, int>, std::vector<int>>& qubit,
+                  std::pair<int, int>& mainGate,
+                  std::pair<int, int>& punishSwap,
+                  std::unordered_map<int, int>& swapMap,
+                  std::unordered_map<int, int>& futureSwapMap,
+                  const std::vector<std::pair<int, int>>& gates,
+                  std::vector<std::vector<int>>& allPairDistance,
+                  BiDict& qubitMapping, int& currentScore, int& bestScore,
+                  std::vector<std::pair<int, int>>& bestSwaps);
 
 int main() {
-    std::srand(42);
-    int logQubits, numGates, numDependencies, phyQubits, numPhyLinks;
-    std::cin >> logQubits >> numGates >> numDependencies >> phyQubits >> numPhyLinks;
+  std::srand(42);
+  int logQubits, numGates, numDependencies, phyQubits, numPhyLinks;
+  std::cin >> logQubits >> numGates >> numDependencies >> phyQubits >>
+      numPhyLinks;
 
-    std::vector<std::pair<int, int>> gates(numGates);
-    for (int i = 0; i < numGates; ++i) {
-        int _, srcbit, dstbit;
-        std::cin >> _ >> srcbit >> dstbit;
-        gates[i] = std::make_pair(srcbit - 1, dstbit - 1);
+  std::vector<std::pair<int, int>> gates(numGates);
+  for (int i = 0; i < numGates; ++i) {
+    int _, srcbit, dstbit;
+    std::cin >> _ >> srcbit >> dstbit;
+    gates[i] = std::make_pair(srcbit - 1, dstbit - 1);
+  }
+
+  std::vector<std::pair<int, int>> dependencies(numDependencies);
+  for (int i = 0; i < numDependencies; ++i) {
+    int _, srcgate, tgtgate;
+    std::cin >> _ >> srcgate >> tgtgate;
+    dependencies[i] = std::make_pair(srcgate - 1, tgtgate - 1);
+  }
+
+  Graph g(logQubits);
+  for (int i = 0; i < numPhyLinks; ++i) {
+    int _, src, dst;
+    std::cin >> _ >> src >> dst;
+    g.addEdge(src - 1, dst - 1);
+  }
+
+  BiDict qubitMapping(logQubits);
+  for (int i = 0; i < logQubits; ++i) {
+    qubitMapping.setItem(i, i);
+  }
+
+  std::vector<std::pair<int, std::pair<int, int>>> operations =
+      sabresSwap(gates, dependencies, g, logQubits, numGates);
+
+  for (int i = 0; i < logQubits; ++i) {
+    std::cout << i + 1 << " " << qubitMapping.getItem(i) + 1 << std::endl;
+  }
+
+  // printf("%d\n", operations.size());
+
+  for (const auto& op : operations) {
+    if (op.first == 1) {
+      std::cout << "CNOT q" << op.second.first + 1 << " q"
+                << op.second.second + 1 << std::endl;
+    } else {
+      std::cout << "SWAP q" << op.second.first + 1 << " q"
+                << op.second.second + 1 << std::endl;
     }
+  }
 
-    std::vector<std::pair<int, int>> dependencies(numDependencies);
-    for (int i = 0; i < numDependencies; ++i) {
-        int _, srcgate, tgtgate;
-        std::cin >> _ >> srcgate >> tgtgate;
-        dependencies[i] = std::make_pair(srcgate - 1, tgtgate - 1);
-    }
-
-    Graph g(logQubits);
-    for (int i = 0; i < numPhyLinks; ++i) {
-        int _, src, dst;
-        std::cin >> _ >> src >> dst;
-        g.addEdge(src - 1, dst - 1);
-    }
-
-    BiDict qubitMapping(logQubits);
-    for (int i = 0; i < logQubits; ++i) {
-        qubitMapping.setItem(i, i);
-    }
-
-    std::vector<std::pair<int, std::pair<int, int>>> operations = sabresSwap(gates, dependencies, g, logQubits, numGates);
-
-    for (int i = 0; i < logQubits; ++i) {
-        std::cout << i + 1 << " " << qubitMapping.getItem(i) + 1 << std::endl;
-    }
-
-    // printf("%d\n", operations.size());
-
-    for (const auto& op : operations) {
-        if (op.first == 1) {
-            std::cout << "CNOT q" << op.second.first + 1 << " q" << op.second.second + 1 << std::endl;
-        } else {
-            std::cout << "SWAP q" << op.second.first + 1 << " q" << op.second.second + 1 << std::endl;
-        }
-    }
-
-    return 0;
+  return 0;
 }
 
 std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits, int numGates) {
