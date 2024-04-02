@@ -196,7 +196,7 @@ for folder in folders:
         os._exit(1)
 
     if not failed_testcase:
-        print(f"{folder} completed, avg {total_cnot_counter/len(testcases):.3f} CNOT, {total_swap_counter/len(testcases):.3f} SWAP, {total_runtime/len(testcases):.3f}seconds")
+        print(f"{folder} completed, avg {total_cnot_counter/len(testcases):.3f} CNOT, {total_swap_counter/len(testcases):.3f} SWAP, {total_runtime/len(testcases):.3f} seconds")
         benchmark_result.append((folder, total_cnot_counter/len(testcases), total_swap_counter/len(testcases), total_runtime/len(testcases)))
     else:
         print(f"failed testcase: {failed_testcase}")

@@ -169,9 +169,9 @@ int main() {
 
     for (const auto& op : operations) {
         if (op.first == 1) {
-            std::cout << "CNOT q" << op.second.first + 1 << " q" << op.second.second + 1 << std::endl;
+            std::cout << "CNOT q" << op.second.first + 1 << " q" << op.second.second + 1 << '\n';
         } else {
-            std::cout << "SWAP q" << op.second.first + 1 << " q" << op.second.second + 1 << std::endl;
+            std::cout << "SWAP q" << op.second.first + 1 << " q" << op.second.second + 1 << '\n';
         }
     }
 
@@ -282,7 +282,7 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
     }
 
     for (int i = 0; i < logQubits; ++i) {
-        std::cout << i + 1 << " " << qubitMapping.getItem(i) + 1 << std::endl;
+        std::cout << i + 1 << ' ' << qubitMapping.getItem(i) + 1 << '\n';
     }
 
     for (const auto& dependency : dependencies) {
@@ -470,9 +470,9 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
         swapQubit(qubitMapping, bestSwap);
         operations.push_back(std::make_pair(0, bestSwap));
 
-        if(executableQueue.size() > 30) {
-            continue;
-        }
+        // if(executableQueue.size() > 30) {
+        //     continue;
+        // }
 
         for (int gate : executableQueue) {
             checkQueue.push(gate);
