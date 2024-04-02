@@ -230,7 +230,8 @@ std::vector<int> sortQubits(const std::vector<std::vector<int>>& F, int logQubit
     return queue;
 }
 
-void allocateQubit(const std::vector<std::vector<int>>& F, const std::vector<std::vector<int>>& allPairDistance, const Graph& g, BiDict& qubitMapping, int logQubits) {
+void allocateQubit(const std::vector<std::pair<int, int>>& gates, const std::vector<std::vector<int>>& allPairDistance, const Graph& g, BiDict& qubitMapping, int logQubits) {
+    std::vector<std::vector<int>> F = getFrequencyMatrix(gates, logQubits);
     std::vector<int> queue = sortQubits(F, logQubits);
     int maxInDegree = g.maxInDegree();
     std::unordered_set<int> phyQubits(logQubits);
@@ -270,8 +271,19 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
     std::vector<int> inDegree(numGates, 0);
 
     std::vector<std::vector<int>> allPairDistance = g.allPairDistances();
-    std::vector<std::vector<int>> frequency = getFrequencyMatrix(gates, logQubits);
-    allocateQubit(frequency, allPairDistance, g, qubitMapping, logQubits);
+    
+    if(true) {
+        allocateQubit(gates, allPairDistance, g, qubitMapping, logQubits);
+    } else {
+        // random assign qubit mapping
+        for (int i = 0; i < logQubits; ++i) {
+            qubitMapping.setItem(i, i);
+        }
+    }
+
+    for (int i = 0; i < logQubits; ++i) {
+        std::cout << i + 1 << " " << qubitMapping.getItem(i) + 1 << std::endl;
+    }
 
     for (const auto& dependency : dependencies) {
         int u = dependency.first;
@@ -280,19 +292,12 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
         inDegree[v]++;
     }
 
-    // random assign qubit mapping
     std::vector<std::pair<int, std::pair<int, int>>> operations;
-    // for (int i = 0; i < logQubits; ++i) {
-    //     qubitMapping.setItem(i, i);
-    // }
-
-    for (int i = 0; i < logQubits; ++i) {
-        std::cout << i + 1 << " " << qubitMapping.getItem(i) + 1 << std::endl;
-    }
 
     std::queue<int> checkQueue;
     // std::unordered_set<int> executableQueue;
     std::vector<int> executableQueue;
+    std::vector<int> futureQueue;
 
     // find all gate id with no dependency
     for (int idx = 0; idx < numGates; idx++) {
@@ -339,7 +344,7 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
 
 
 
-        std::vector<int> futureQueue;
+        futureQueue.clear();
         std::vector<std::pair<int, int>> bestSwaps;
         std::pair<int, int> bestSwap;
         std::pair<int, int> punishSwap = std::make_pair(-1, -1);
@@ -464,6 +469,10 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
         // printf("best swap (%d, %d), score %d\n", bestSwap.first, bestSwap.second, bestScore);
         swapQubit(qubitMapping, bestSwap);
         operations.push_back(std::make_pair(0, bestSwap));
+
+        if(executableQueue.size() > 30) {
+            continue;
+        }
 
         for (int gate : executableQueue) {
             checkQueue.push(gate);

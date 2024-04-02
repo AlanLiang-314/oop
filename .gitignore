@@ -1,6 +1,6 @@
 *.exe
 .vscode/
-testset/
+testset/large/
 *.png
 *.pdf
 *.zip
