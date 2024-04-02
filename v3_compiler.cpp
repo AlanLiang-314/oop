@@ -84,35 +84,38 @@ public:
         return graph[node];
     }
 
-    // floyd method
     std::vector<std::vector<int>> allPairDistances() const {
         int n = graph.size();
-        const int INF = INT_MAX / 2; // Use large enough value
-
-        std::vector<std::vector<int>> dist(n, std::vector<int>(n, INF));
+        std::vector<std::vector<int>> distances(n, std::vector<int>(n, -1));
 
         for (int i = 0; i < n; i++) {
-            dist[i][i] = 0;
-        }
+            distances[i][i] = 0;
+            std::queue<int> q;
+            q.push(i);
+            std::vector<bool> visited(n, false);
+            visited[i] = true;
+            int distance = 0;
 
-        for (int i = 0; i < n; i++) {
-            for (int j : graph[i]) {
-                dist[i][j] = 1;
-            }
-        }
-
-        for (int k = 0; k < n; k++) {
-            for (int i = 0; i < n; i++) {
-                for (int j = 0; j < n; j++) {
-                    if (dist[i][k] < INF && dist[k][j] < INF) {
-                        dist[i][j] = std::min(dist[i][j], dist[i][k] + dist[k][j]);
+            while (!q.empty()) {
+                int size = q.size();
+                for (int j = 0; j < size; j++) {
+                    int node = q.front();
+                    q.pop();
+                    for (int neighbor : getNeighbor(node)) {
+                        if (!visited[neighbor]) {
+                            visited[neighbor] = true;
+                            distances[i][neighbor] = distance + 1;
+                            q.push(neighbor);
+                        }
                     }
                 }
+                distance++;
             }
         }
 
-        return dist;
+        return distances;
     }
+
 };
 
 void swapQubit(BiDict& qubitMapping, std::pair<int, int> gate) {
@@ -121,7 +124,7 @@ void swapQubit(BiDict& qubitMapping, std::pair<int, int> gate) {
 }
 
 // Function declarations
-std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits, int numGates);
+std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, BiDict& qubitMapping, int logQubits, int numGates);
 
 int main() {
     std::srand(42);
@@ -154,7 +157,7 @@ int main() {
         qubitMapping.setItem(i, i);
     }
 
-    std::vector<std::pair<int, std::pair<int, int>>> operations = sabresSwap(gates, dependencies, g, logQubits, numGates);
+    std::vector<std::pair<int, std::pair<int, int>>> operations = sabresSwap(gates, dependencies, g, qubitMapping, logQubits, numGates);
 
     for (int i = 0; i < logQubits; ++i) {
         std::cout << i + 1 << " " << qubitMapping.getItem(i) + 1 << std::endl;
@@ -173,9 +176,24 @@ int main() {
     return 0;
 }
 
-std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, int logQubits, int numGates) {
+std::vector<std::vector<int>> getFrequencyMatrix(const std::vector<std::pair<int, int>>& gates, int n) {
+    std::vector<std::vector<int>> freqeuncy(n, std::vector<int>(n, 0));
+    for(const auto& gate : gates) {
+        freqeuncy[gate.first][gate.second]++;
+        freqeuncy[gate.second][gate.first]++;
+    }
+    return freqeuncy;
+}
+
+std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<std::pair<int, int>>& gates, const std::vector<std::pair<int, int>>& dependencies, const Graph& g, BiDict& qubitMapping, int logQubits, int numGates) {
     std::vector<std::vector<int>> dependencyGraph(numGates);
     std::vector<int> inDegree(numGates, 0);
+
+    std::vector<std::vector<int>> allPairDistance = g.allPairDistances();
+    std::vector<std::vector<int>> frequency = getFrequencyMatrix(gates, logQubits);
+
+    // std::priority_queue<int> pq;
+
 
     for (const auto& dependency : dependencies) {
         int u = dependency.first;
@@ -184,16 +202,6 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
         inDegree[v]++;
     }
 
-    std::queue<int> checkQueue;
-    std::unordered_set<int> executableQueue;
-
-    // find all gate id with no dependency, then evaulate untill no gate can be exucute
-    for (int idx = 0; idx < numGates; idx++) {
-        if (inDegree[idx] == 0) {
-            checkQueue.push(idx);
-        }
-    }
-    
     // random assign qubit mapping
     std::vector<std::pair<int, std::pair<int, int>>> operations;
     BiDict qubitMapping(logQubits);
@@ -201,10 +209,20 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
         qubitMapping.setItem(i, i);
     }
 
-    std::vector<std::vector<int>> allPairDistance = g.allPairDistances();
+    std::queue<int> checkQueue;
+    // std::unordered_set<int> executableQueue;
+    std::vector<int> executableQueue;
+
+    // find all gate id with no dependency
+    for (int idx = 0; idx < numGates; idx++) {
+        if (inDegree[idx] == 0) {
+            checkQueue.push(idx);
+        }
+    }
+    
 
     int a_cnt = 2;
-    while (1 && a_cnt--) {
+    while (true) {
         // printf("check queue size %d\n", checkQueue.size());
 
         while (!checkQueue.empty()) {
@@ -213,21 +231,22 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
             // printf("check candidate %d\n", candidate + 1);
             int logSrc = gates[candidate].first;
             int logDst = gates[candidate].second;
-
             if (allPairDistance[qubitMapping.getItem(logSrc)][qubitMapping.getItem(logDst)] == 1) {
-                // printf("done candidate %d, (%d, %d)\n", candidate + 1, logSrc + 1, logDst + 1);
-                operations.push_back(std::make_pair(1, gates[candidate]));
+                // printf("done candidate %d, (%d, %d)\n", candidate, logSrc, logDst);
+                operations.push_back(std::make_pair(1, std::make_pair(logSrc, logDst)));
 
                 for (int v : dependencyGraph[candidate]) {
                     inDegree[v]--;
                     if (inDegree[v] == 0) {
+                        // printf("new candidate %d\n", v + 1);
                         checkQueue.push(v);
                     }
                 }
 
             } else {
                 // printf("new executable %d\n", candidate + 1);
-                executableQueue.insert(candidate);
+                // executableQueue.insert(candidate);
+                executableQueue.push_back(candidate);
             }
 
             // printf("check queue size %d\n", checkQueue.size());
@@ -237,173 +256,143 @@ std::vector<std::pair<int, std::pair<int, int>>> sabresSwap(const std::vector<st
             break;
         }
 
+
+
         std::vector<int> futureQueue;
-        for (int candidate : executableQueue) {
+        std::vector<std::pair<int, int>> bestSwaps;
+        std::pair<int, int> bestSwap;
+        std::pair<int, int> punishSwap = std::make_pair(-1, -1);
+
+        std::unordered_map<int, int> swapMap;
+        std::unordered_map<int, int> futureSwapMap;
+        std::vector<std::pair<std::pair<int, int>, std::vector<int>>> candidateSwaps(executableQueue.size() * 2);
+
+        int index = 0;
+        for (const int& candidate : executableQueue) {
+            int logSrc = gates[candidate].first;
+            int logDst = gates[candidate].second;
+            int phySrc = qubitMapping.getItem(logSrc);
+            int phyDst = qubitMapping.getItem(logDst);
+            // swapMap[logSrc] = candidate;
+            // swapMap[logDst] = candidate;
+            swapMap[phySrc] = candidate;
+            swapMap[phyDst] = candidate;
+
+            // printf("%d %d ", logSrc, logDst);
+            
             for (int neighbor : dependencyGraph[candidate]) {
                 if (inDegree[neighbor] == 1) {
                     futureQueue.push_back(neighbor);
+                    int logSrc = gates[neighbor].first;
+                    int logDst = gates[neighbor].second;
+                    int phySrc = qubitMapping.getItem(logSrc);
+                    int phyDst = qubitMapping.getItem(logDst);
+                    futureSwapMap[phySrc] = neighbor;
+                    futureSwapMap[phyDst] = neighbor;
                 }
+            }
+
+            candidateSwaps[index].first = std::make_pair(phySrc, phyDst);
+            for (int neighbor : g.getNeighbor(phySrc)) {
+                candidateSwaps[index].second.push_back(neighbor);
+            }
+            index++;
+
+            candidateSwaps[index].first = std::make_pair(phyDst, phySrc);
+            for (int neighbor : g.getNeighbor(phyDst)) {
+                candidateSwaps[index].second.push_back(neighbor);
+            }
+            index++;
+        }
+        // printf("\n");
+
+        // for (int candidate : futureQueue) {
+            // printf("%d %d ", gates[candidate].first, gates[candidate].second);
+        // }
+        // printf("\n");
+
+        int currentScore, bestScore = INT_MAX;
+        bestSwaps.clear();
+
+        for(const auto& qubit : candidateSwaps) {
+            auto mainGate = qubit.first;
+            // we swap mainGate.first and neighbor
+            for (int neighbor : qubit.second) {
+                auto swap = std::make_pair(qubitMapping.getReverseItem(mainGate.first), qubitMapping.getReverseItem(neighbor));
+                if(punishSwap == swap || (punishSwap.second == swap.first && punishSwap.first == swap.second)) {
+                    break;
+                }
+                // printf("logSrc %d, neighbor %d\n", mainGate.first, neighbor);
+                auto itSwap = swapMap.find(neighbor), itFSwapSrc = futureSwapMap.find(mainGate.first), itFSwapDst = futureSwapMap.find(neighbor);
+                int distance = 0, futureDistance = 0;
+                if (itSwap != swapMap.end()) {
+                    auto gate = gates[itSwap->second];
+                    distance -= allPairDistance[gate.first][gate.second];
+                    // printf("has a friend (%d, %d), distance %d\n", gate.first, gate.second, allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)]);
+                }
+                if (itFSwapSrc != futureSwapMap.end()) {
+                    auto gate = gates[itFSwapSrc->second];
+                    futureDistance -= allPairDistance[gate.first][gate.second];
+                    // printf("has a future friend (%d, %d), distance %d\n", gate.first, gate.second, allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)]);
+                }
+                if (itFSwapDst != futureSwapMap.end()) {
+                    auto gate = gates[itFSwapDst->second];
+                    futureDistance -= allPairDistance[gate.first][gate.second];
+                    // printf("has a future friend (%d, %d), distance %d\n", gate.first, gate.second, allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)]);
+                }
+                distance -= allPairDistance[mainGate.first][mainGate.second];
+                // printf("has a friend (%d, %d) distance %d\n", mainGate.first, mainGate.second, allPairDistance[qubitMapping.getItem(mainGate.first)][qubitMapping.getItem(mainGate.second)]);
+
+                swapQubit(qubitMapping, swap);
+
+                if (itSwap != swapMap.end()) {
+                    auto gate = gates[itSwap->second];
+                    distance += allPairDistance[gate.first][gate.second];
+                    // printf("has a friend (%d, %d), distance %d\n", gate.first, gate.second, allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)]);
+                }
+                if (itFSwapSrc != futureSwapMap.end()) {
+                    auto gate = gates[itFSwapSrc->second];
+                    futureDistance += allPairDistance[gate.first][gate.second];
+                    // printf("has a future friend (%d, %d), distance %d, now distance %d\n", gate.first, gate.second, allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)], futureDistance);
+                }
+                if (itFSwapDst != futureSwapMap.end()) {
+                    auto gate = gates[itFSwapDst->second];
+                    futureDistance += allPairDistance[gate.first][gate.second];
+                    // printf("has a future friend (%d, %d), distance %d, now distance %d\n", gate.first, gate.second, allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)], futureDistance);
+                }
+                distance += allPairDistance[mainGate.first][mainGate.second];
+                // printf("has a friend (%d, %d) distance %d\n", mainGate.first, mainGate.second, allPairDistance[qubitMapping.getItem(mainGate.first)][qubitMapping.getItem(mainGate.second)]);
+
+                swapQubit(qubitMapping, swap);
+
+                // printf("swap (%d, %d), score %d, future score %d\n", mainGate.first, neighbor, distance, futureDistance);
+
+                currentScore = 2 * distance + futureDistance;
+                if (currentScore < bestScore) {
+                    bestScore = currentScore;
+                    bestSwaps.clear();
+                    bestSwaps.push_back(swap);
+                    // printf("clear, (%d, %d) push into best swap\n", swap.first, swap.second);
+                } else if (currentScore == bestScore) {
+                    bestSwaps.push_back(swap);
+                    // printf("(%d, %d) push into best swap\n", swap.first, swap.second);
+                }
+                
             }
         }
 
-        std::vector<std::vector<int>> bestSolvedGates;
-        std::vector<int> bestSolvedGate;
-        std::vector<std::pair<int, int>> bestSwaps;
-        std::pair<int, int> bestSwap;
+        int idx = std::rand() % bestSwaps.size();
+        bestSwap = bestSwaps[idx];
+        punishSwap = bestSwap;
 
-        // int cnt = 3;
-        while (bestSolvedGates.empty()) {
-            std::unordered_map<int, int> swapMap;
-            std::unordered_map<int, int> futureSwapMap;
-            std::vector<std::pair<int, std::vector<int>>> candidateSwaps(executableQueue.size() * 2); // each gate and their neighbor
+        // printf("best swap (%d, %d), score %d\n", bestSwap.first, bestSwap.second, bestScore);
+        swapQubit(qubitMapping, bestSwap);
+        operations.push_back(std::make_pair(0, bestSwap));
 
-            int index = 0;
-            for (const int& candidate : executableQueue) {
-                int logSrc = gates[candidate].first;
-                int logDst = gates[candidate].second;
-                int phySrc = qubitMapping.getItem(logSrc);
-                int phyDst = qubitMapping.getItem(logDst);
-                swapMap[logSrc] = candidate;
-                swapMap[logDst] = candidate;
-                printf("%d %d ", logSrc, logDst);
-
-                candidateSwaps[index].first = candidate;
-                for (int neighbor : g.getNeighbor(phySrc)) {
-                    candidateSwaps[index].second.push_back(qubitMapping.getReverseItem(neighbor));
-                    // candidateSwap.insert(std::make_pair(logSrc, qubitMapping.getReverseItem(neighbor)));
-                }
-                index++;
-
-                candidateSwaps[index].first = candidate;
-                for (int neighbor : g.getNeighbor(phyDst)) {
-                    candidateSwaps[index].second.push_back(qubitMapping.getReverseItem(neighbor));
-                    // candidateSwap.insert(std::make_pair(logDst, qubitMapping.getReverseItem(neighbor)));
-                }
-                index++;
-            }
-            printf("\n");
-
-            for (const int& candidate : futureQueue) {
-                int logSrc = gates[candidate].first;
-                int logDst = gates[candidate].second;
-                futureSwapMap[logSrc] = candidate;
-                futureSwapMap[logDst] = candidate;
-                printf("%d %d ", gates[candidate].first, gates[candidate].second);
-            }
-            printf("\n");
-
-
-            // {
-            // int bestScore = 0;
-            // for (const int& candidate : executableQueue) {
-            //         int logSrc = gates[candidate].first;
-            //         int logDst = gates[candidate].second;
-            //         int distance = allPairDistance[qubitMapping.getItem(logSrc)][qubitMapping.getItem(logDst)];
-            //         bestScore += distance;
-            //         assert(distance > 1);
-            // }
-
-            // int currentFutureScore = 0;     
-            // for (const int& candidate : futureQueue) {
-            //     int logSrc = gates[candidate].first;
-            //     int logDst = gates[candidate].second;
-            //     int distance = allPairDistance[qubitMapping.getItem(logSrc)][qubitMapping.getItem(logDst)];
-            //     currentFutureScore += distance;
-            // }
-
-            // // printf("origin score %d, origin future %d\n", bestScore, currentFutureScore);
-            // }
-
-            // bestScore = INT_MAX;
-            float currentScore = 0, bestScore = 0;
-            std::vector<int> solvedGate;
-
-            for(const auto& qubit : candidateSwaps) {
-                auto mainGate = gates[qubit.first];
-                // we swap mainGate.first and neighbor
-                for (int neighbor : qubit.second) {
-                    auto swap = std::make_pair(mainGate.first, neighbor);
-                    auto itSwap = swapMap.find(neighbor), itFSwapSrc = futureSwapMap.find(mainGate.first), itFSwapDst = futureSwapMap.find(neighbor);
-                    int distance = 0, futureDistance = 0;
-
-                    if (itSwap != swapMap.end()) {
-                        auto gate = gates[itSwap->second];
-                        distance -= allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)];
-                        printf("(%d, %d), -%d\n", gate.first, gate.second, allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)]);
-                    }
-                    if (itFSwapSrc != futureSwapMap.end()) {
-                        auto gate = gates[itFSwapSrc->second];
-                        futureDistance -= allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)];
-                    }
-                    if (itFSwapDst != futureSwapMap.end()) {
-                        auto gate = gates[itFSwapDst->second];
-                        futureDistance -= allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)];
-                    }
-                    distance -= allPairDistance[qubitMapping.getItem(mainGate.first)][qubitMapping.getItem(mainGate.second)];
-                    printf("(%d, %d), -%d\n", mainGate.first, mainGate.second, allPairDistance[qubitMapping.getItem(mainGate.first)][qubitMapping.getItem(mainGate.second)]);
-
-                    swapQubit(qubitMapping, swap);
-
-                    printf("(%d, %d) +%d\n", mainGate.first, mainGate.second, allPairDistance[qubitMapping.getItem(mainGate.first)][qubitMapping.getItem(mainGate.second)]);
-
-                    if (itSwap != swapMap.end()) {
-                        auto gate = gates[itSwap->second];
-                        int dist = allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)];
-                        if(dist == 1) solvedGate.push_back(itSwap->second);
-                        printf("(%d, %d), +%d\n", gate.first, gate.second, dist);
-                        distance += dist;
-                    }
-                    if (itFSwapSrc != futureSwapMap.end()) {
-                        auto gate = gates[itFSwapSrc->second];
-                        int dist = allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)];
-                        if(dist == 1) solvedGate.push_back(itFSwapSrc->second);
-                        futureDistance += dist;
-                    }
-                    if (itFSwapDst != futureSwapMap.end()) {
-                        auto gate = gates[itFSwapDst->second];
-                        int dist = allPairDistance[qubitMapping.getItem(gate.first)][qubitMapping.getItem(gate.second)];
-                        if(dist == 1) solvedGate.push_back(itFSwapDst->second);
-                        futureDistance += dist;
-                    }
-                    
-                    int dist = allPairDistance[qubitMapping.getItem(mainGate.first)][qubitMapping.getItem(mainGate.second)];
-                    if(dist == 1) solvedGate.push_back(qubit.first);
-                    printf("(%d, %d) +%d\n", mainGate.first, mainGate.second, dist);
-                    distance += dist;
-                    
-
-                    swapQubit(qubitMapping, swap);
-
-                    printf("swap (%d, %d), score %d, future score %d\n", mainGate.first, neighbor, distance, futureDistance);
-
-                    currentScore = distance + 0.5 * futureDistance;
-
-                    if (currentScore < bestScore) {
-                        bestScore = currentScore;
-                        bestSwaps.clear();
-                        bestSwaps.push_back(swap);
-                        bestSolvedGates.clear();
-                        bestSolvedGates.push_back(solvedGate);
-                    } else if (currentScore == bestScore) {
-                        bestSwaps.push_back(swap);
-                        bestSolvedGates.push_back(solvedGate);
-                    }                   
-                }
-            }
-
-            int idx = std::rand() % bestSwaps.size();
-            std::pair<int, int> bestSwap = bestSwaps[idx];
-            bestSolvedGate = bestSolvedGates[idx];
-
-            printf("best swap (%d, %d), score %d\n", bestSwap.first, bestSwap.second, bestScore);
-            swapQubit(qubitMapping, bestSwap);
-            operations.push_back(std::make_pair(0, bestSwap));
-        }
-
-        for (int gate : bestSolvedGate) {
-            executableQueue.erase(gate);
+        for (int gate : executableQueue) {
             checkQueue.push(gate);
         }
+        executableQueue.clear();
     }
 
     return operations;

@@ -159,7 +159,7 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
     if failure:
         print(f"{testcase} failed.")
     else:
-        print(f"{testcase} all OK. {cnot_counter} CNOT, {swap_counter} SWAP, {runtime:.3f} s")
+        print(f"{testcase} all OK. {cnot_counter} CNOT, {swap_counter} SWAP, {runtime:.3f}s")
 
     return cnot_counter, swap_counter, runtime, failure
 
@@ -196,8 +196,8 @@ for folder in folders:
         os._exit(1)
 
     if not failed_testcase:
-        print(f"{folder} completed, avg {total_cnot_counter/len(testcases):.3f} CNOT, {total_swap_counter/len(testcases):.3f} SWAP, {total_runtime/len(testcases):.3f} seconds")
-        benchmark_result.append((folder, total_cnot_counter/len(testcases), total_swap_counter/len(testcases)))
+        print(f"{folder} completed, avg {total_cnot_counter/len(testcases):.3f} CNOT, {total_swap_counter/len(testcases):.3f} SWAP, {total_runtime/len(testcases):.3f}seconds")
+        benchmark_result.append((folder, total_cnot_counter/len(testcases), total_swap_counter/len(testcases), total_runtime/len(testcases)))
     else:
         print(f"failed testcase: {failed_testcase}")
         os._exit(1)
@@ -205,4 +205,4 @@ for folder in folders:
 print("-" * 60)
 print("result:")
 for benchmark in benchmark_result:
-    print(f"{benchmark[0]}: avg {benchmark[1]} CNOT, {benchmark[2]} SWAP")
+    print(f"{benchmark[0]}: avg {benchmark[1]:.3f} CNOT, {benchmark[2]:.3f} SWAP, {benchmark[3]:.3f}s")
