@@ -4,3 +4,6 @@ testset/large/
 *.png
 *.pdf
 *.zip
+project1.cpp
+OOP*
+*.out

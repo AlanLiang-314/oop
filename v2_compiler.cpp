@@ -82,7 +82,7 @@ public:
         return maxInDegreeIdx;
     }
 
-    std::vector<int> getNeighbor(int node) const {
+    const auto& getNeighbor(int node) const {
         return graph[node];
     }
 
@@ -116,6 +116,33 @@ public:
         }
 
         return distances;
+    }
+
+};
+
+class dependencyGraph {
+private:
+    std::vector<std::vector<int>> graph;
+    std::vector<int> inDegree;
+    // std::vector<int> outDegree;
+public:
+    dependencyGraph(int n) : graph(n), inDegree(n, 0) {}
+
+    void build(const std::vector<std::pair<int, int>>& dependencies) {
+        for(const auto& dependency : dependencies) {
+            graph[dependency.first].push_back(dependency.second);
+            inDegree[dependency.second]++;
+            // outDegree[dependency.first]++;
+        }
+    }
+
+    void removeItem(int gateId) {
+        for(const auto& v : graph[gateId]) {
+            inDegree[v]--;
+            if(inDegree[v] == 0) {
+
+            }
+        }
     }
 
 };

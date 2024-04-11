@@ -1,7 +1,6 @@
 import os
 import argparse
 import subprocess
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import time
@@ -25,7 +24,7 @@ class Graph:
         return False
 
 
-parser = argparse.ArgumentParser(description='good Program')
+parser = argparse.ArgumentParser(description='A simple judge')
 parser.add_argument('--exe', type=str, default="output.txt", help='Path to the solution file')
 parser.add_argument('--testset_path', type=str, default="testset", help='Path to the testset folder')
 parser.add_argument('--folders', type=str, nargs='+', default=["tiny"], help='List of folders to test, should be in the testset folder.')
@@ -40,12 +39,15 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
     input_file = open(testcase, 'r', encoding="utf-8")
     iterator = iter(input_file)
 
+    #--------------- start of the input preprocess -----------------#
+
     logQubits, num_gates, num_dependencies, phyQubits, num_phyLinks = map(int, next(iterator).split())
     gates = []
     dependencies = []
 
     for _ in range(num_gates):
         _, srcbit, dstbit = map(int, next(iterator).split())
+        srcbit, dstbit = (srcbit, dstbit) if srcbit < dstbit else (dstbit, srcbit)
         gates.append((srcbit, dstbit))
 
     for _ in range(num_dependencies):
@@ -68,16 +70,12 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
 
     queue = set([u for u in range(1, num_gates + 1) if in_degree[u] == 0])
 
+    #------------------- run the solution file -------------------------#
+
     if os.name == 'nt':  # Windows
         command = f"type {testcase} | {excutable_name}"
     else:  # Unix/Linux
         command = f"cat {testcase} | {excutable_name}"
-    
-    # try:
-    #     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3)
-    # except subprocess.TimeoutExpired:
-    #     print(f"Test case {testcase} timed out after {3} seconds")
-    #     exit(1)
         
     start_time = time.time()
 
@@ -97,6 +95,8 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
     end_time = time.time()
     runtime = end_time - start_time
 
+    #--------------------------------------------------------------------#
+
     try:
         output_file = stdout.strip().split("\n")
 
@@ -110,17 +110,26 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
         cnot_counter, swap_counter = 0, 0
 
         failure = False
+        gate_used = 0
+
+        # print(G.graph)
+        # print(in_degree)
 
         while queue and not failure:
             op_type, src, dst = next(iterator).split()
             src, dst = int(src[1:]), int(dst[1:])
             log_src, log_dst = (src, dst) if src < dst else (dst, src)
+            # print(queue)
+            # print(qubit_mapping)
+            # print(f"{op_type} {log_dst} {log_src}")
 
             if op_type == "CNOT":
                 try:
                     gate_id = gates.index((log_src, log_dst))
                     gates[gate_id] = (-1, -1)
+                    gate_used += 1
                     gate_id += 1
+                    # print(f"({log_src}, {log_dst}) -> gate id {gate_id}")
 
                 except ValueError:
                     print(f"gate not found: {(log_src, log_dst)}")
@@ -133,8 +142,10 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
                     failure = True
                     # exit(1)
 
+                # print(f"({qubit_mapping[log_src]}, {qubit_mapping[log_dst]}) are nieghbors? {G.are_neighbors(qubit_mapping[log_src], qubit_mapping[log_dst])}")
+
                 if not G.are_neighbors(qubit_mapping[log_src], qubit_mapping[log_dst]):
-                    print(f"{(log_src, log_dst)} are not neighbors")
+                    print(f"{(qubit_mapping[log_src], qubit_mapping[log_dst])} are not neighbors, can't do CNOT")
                     failure = True
                     # exit(1)
 
@@ -145,6 +156,9 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
                 cnot_counter += 1
 
             elif op_type == "SWAP":
+                if not G.are_neighbors(qubit_mapping[log_src], qubit_mapping[log_dst]):
+                    print(f"{(qubit_mapping[log_src], qubit_mapping[log_dst])} are not neighbors, can't do SWAP")
+                    failure = True
                 qubit_mapping[log_src], qubit_mapping[log_dst] = qubit_mapping[log_dst], qubit_mapping[log_src]
 
                 swap_counter += 1
@@ -152,6 +166,11 @@ def run_test_case(testcase, testcase_path, excutable_name: str = None, timeout: 
             else:
                 print(f"unknown op type: {op_type}")
                 exit(1)
+
+        if gate_used < num_gates:
+            print("some gates aren't used")
+            failure = True
+
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         failure = True
