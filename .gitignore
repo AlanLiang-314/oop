@@ -1,9 +1,8 @@
 *.exe
 .vscode/
-testset/large/
+testset
 *.png
 *.pdf
 *.zip
-project1.cpp
 OOP*
 *.out

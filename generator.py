@@ -3,17 +3,17 @@ import networkx as nx
 import os
 
 seeds: int = 1
-testset_type: str = "large_v2"
+testset_type: str = "dense"
 
 if not os.path.exists(os.path.join("testset", testset_type)):
     os.makedirs(os.path.join("testset", testset_type))
 
-for seeds in range(1, 21):
+for seeds in range(1, 100):
     random.seed(seeds)
 
     # large
-    logQubits = random.randint(5000, 7000)
-    gates = random.randint(8000, 10000)
+    # logQubits = random.randint(5000, 7000)
+    # gates = random.randint(8000, 10000)
 
     # medium
     # logQubits = random.randint(1000, 2000)
@@ -24,15 +24,15 @@ for seeds in range(1, 21):
     # gates = random.randint(1000, 2000)
 
     # xsmall
-    # logQubits = random.randint(100, 300)
-    # gates = random.randint(250, 600)
+    logQubits = random.randint(100, 300)
+    gates = random.randint(250, 600)
 
     # tiny
     # logQubits = random.randint(4, 10) # 8
     # gates = random.randint(8, 16)
 
 
-    phyLinks = (logQubits - 1) + random.randint(0, 2 * logQubits)
+    phyLinks = (logQubits - 1) + random.randint(4 * logQubits, 6 * logQubits)
     phyLinks = min(phyLinks, (logQubits * (logQubits - 1)) // 2)
     phyQubits = logQubits
 
